@@ -1,0 +1,75 @@
+# R: we can grab the active plugins in a bash array using the following:
+# dconf dump /org/compiz/profiles/unity/ | grep active-plugins | { read pL; cleanup="${pL:16:-1}"; IFS=', ' read -a pL <<< "$cleanup"; echo "${pL[@]}"; }
+
+
+# R2: we can also get all the data from some a compiz profile like so:
+dconf dump /org/compiz/profiles/unity/
+
+# SO: allData=$(cat dconfDump_orgCompizProfilesUnity)
+
+
+# R3: we can grab just the active plugins part using:
+theActivePlugs=$(dconf dump /org/compiz/profiles/unity/ | grep active-plugins)
+
+# SO: theActivePlugs=$(echo "${allData}"| grep active-plugins)
+# or, if we need an arry out of it, add after the above line: cleanup="${theActivePlugs:16:-1}"; IFS=', ' read -a theActivePlugs <<< "$cleanup";
+
+
+# R4: we can remove one of it's array's keys using:
+# ex: for 'obs' plugin, we wanna remove ", 'obs'" from the array
+echo "${theActivePlugs/$', \'obs\''}"
+# or, without escaping
+echo "${theActivePlugs/$", 'obs'"}"
+# or even
+echo "${theActivePlugs/", 'obs'"}"
+
+# SO: updatedPlugins="${theActivePlugs/", 'obs'"}"
+# or, if we got the name of the plugin to be toggled in a $var
+plugToBeToggled="obs"
+echo "${theActivePlugs/", '$plugToBeToggled'"}"
+
+
+# .. what brings us to something that is SO NEAT it's working I'm kinda kissing angels' butt cheeks ;p
+echo "${allData/"$toBeReplaced"/$updatedPlugins}"
+# /!\ in the above, double-quoting the $toBeReplaced var is MANDATORY ! ( aka else, it won't work :/ )
+
+# SO: updatedData="${allData/"$toBeReplaced"/$updatedPlugins}"
+
+
+# & to check that we didn't screw up stg else ( like [plugins/<plugname>] or $plugins-with-set-keys  )
+echo "${updatedData}" | grep obs # appears two times, and no mention to $active-plugins
+# whereas
+echo "${allData}" | grep obs # appears three times
+
+# .. trying to use 'diff' to compare 2 $vars instead of 2 files, the following DOESN'T work: [ *BUT! .. ]
+diff $(echo "${allData}") $(echo "${updatedData}")
+# .. the following indeed does ( bash extension to POSIX called process substitution .. ever heard ? )
+colordiff <(echo "${allData}") <(echo "${updatedData}")
+# Nb: though, it seems not "that clean" way to do it ( regarding the exit value & beginning stuff ( .. ) )
+
+
+# ----
+# To be able to build a "Plugin Enable" toggle outta this, we have to check whether the plugin's name is or not in the active-plugins part ( string )
+# for hardcoded plugin names:
+if [[ $theActivePlugs =~ .*'obs'.* ]]; then echo "exist"; else echo "nope"; fi
+if [[ $updatedPlugins =~ .*'obs'.* ]]; then echo "exist"; else echo "nope"; fi;
+# or better, to prevent false-positives
+if [[ $theActivePlugs =~ 'obs' ]]; then echo "exist"; else echo "nope"; fi
+
+# /!\ since I can't currently figure out how to check the presence of a value with a $var inside a regx,
+#     the following should comes in handy to check if some key actually exist,using it's name :)
+#
+# DO: cleanup="${theActivePlugs:16:-1}"; IFS=', ' read -a theActivePlugs <<< "$cleanup";
+# then:
+# build up an associative array using the values of our array as keys ( we strip "'"'s to make it work )
+declare -a plugsAssArr; for plug in "${theActivePlugs2[@]}"; do plugsAssArr[${plug//"'"}]=1; done
+# THE ABOVE IS NOT WORKING, DAMN IT !
+
+
+
+# ----
+
+echo -e "${updatedData}" > updatedData.test2
+dconf load /org/compiz/profiles/unity/ < updatedData.test2
+rm updatedData.test2
+
